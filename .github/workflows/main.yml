@@ -85,10 +85,16 @@ jobs:
           Set-ItemProperty -Path $rdpPath -Name "ColorDepth" -Value 3 -Type DWord
           Set-ItemProperty -Path $rdpPath -Name "DWMFRAMEINTERVAL" -Value 1 -Type DWord
           
-          # Network Optimizations
+          # Network Optimizations (Fixed registry path)
           netsh int tcp set global autotuninglevel=normal
           netsh int tcp set global rss=enabled
-          Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Terminal Server\Parameters" -Name "TCPNoDelay" -Value 1 -Type DWord
+          
+          # Create registry path if doesn't exist and set TCPNoDelay
+          $tcpPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server"
+          if (-not (Test-Path "$tcpPath\Parameters")) {
+              New-Item -Path $tcpPath -Name "Parameters" -Force | Out-Null
+          }
+          New-ItemProperty -Path "$tcpPath\Parameters" -Name "TCPNoDelay" -Value 1 -PropertyType DWord -Force | Out-Null
           
           # Disable Visual Effects
           Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Type DWord
@@ -103,23 +109,24 @@ jobs:
               "FontCache",
               "WSearch",
               "TabletInputService", 
-              "WpnService",
-              "Spooler",
-              "PrintNotify"
+              "WpnService"
           )
           
           foreach ($service in $services) {
-              Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
-              Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
-              Write-Host "Disabled: $service"
+              try {
+                  Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+                  Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
+                  Write-Host "✅ Disabled: $service"
+              } catch {
+                  Write-Host "⚠️ Could not disable: $service"
+              }
           }
 
       - name: Clean Temporary Files
         run: |
           # Clean temp files to save space
-          Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
-          Cleanmgr /sagerun:1 | Out-Null
+          Write-Host "✅ Temp files cleaned"
 
       - name: Show Connection Info
         run: |
