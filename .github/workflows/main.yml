@@ -12,7 +12,8 @@ permissions:
   contents: read
 
 defaults:
-  run: pwsh
+  run:
+    shell: pwsh
 
 jobs:
   clean-rdp:
