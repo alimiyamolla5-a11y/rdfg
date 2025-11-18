@@ -1,0 +1,83 @@
+name: Fast RDP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rdp:
+    runs-on: windows-latest
+    timeout-minutes: 360
+
+    steps:
+    - name: Setup RDP & Tailscale
+      run: |
+        # Parallel download and RDP setup
+        $job1 = Start-Job -ScriptBlock {
+          Invoke-WebRequest https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi -OutFile $env:TEMP\ts.msi
+        }
+        
+        # Enable RDP immediately
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "SecurityLayer" -Value 0
+        
+        # Performance optimizations
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "KeepAliveEnable" -Value 1
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "KeepAliveInterval" -Value 1
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "fInheritMaxSessionTime" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "MaxIdleTime" -Value 0
+        
+        # Disable bandwidth throttling
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "FlowControlDisable" -Value 1
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "FlowControlDisplayBandwidth" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "FlowControlChannelBandwidth" -Value 0
+        
+        # Enable clipboard sharing
+        Set-ItemProperty -Path 'HKLM:\Software\Microsoft\Terminal Server Client' -name "DisableClipboardRedirection" -Value 0 -Force
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "fDisableClip" -Value 0
+        
+        # Enable drive/file sharing
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "fDisableCdm" -Value 0
+        
+        # Enable printer sharing
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "fDisableCpm" -Value 0
+        
+        # Create shared folder
+        New-Item -ItemType Directory -Path "C:\Share" -Force
+        New-SmbShare -Name "Share" -Path "C:\Share" -FullAccess "Everyone"
+        
+        # Create user
+        net user rdp FastRDP@2024 /add
+        net localgroup administrators rdp /add
+        
+        # Wait for download
+        Wait-Job $job1
+        Receive-Job $job1
+        
+        # Fast install
+        Start-Process msiexec.exe -Wait -ArgumentList "/i $env:TEMP\ts.msi /quiet /qn /norestart"
+        
+    - name: Connect
+      run: |
+        & 'C:\Program Files\Tailscale\tailscale.exe' up --authkey=$Env:TAILSCALE_AUTHKEY --hostname=fast-rdp --accept-routes
+        $ip = & 'C:\Program Files\Tailscale\tailscale.exe' ip -4
+        Write-Host "=========================================="
+        Write-Host "READY! IP: $ip"
+        Write-Host "User: rdp | Pass: FastRDP@2024"
+        Write-Host ""
+        Write-Host "Features Enabled:"
+        Write-Host "✓ Clipboard sharing (copy/paste)"
+        Write-Host "✓ File sharing (drag & drop)"
+        Write-Host "✓ Drive redirection"
+        Write-Host "✓ Network share: \\$ip\Share"
+        Write-Host "=========================================="
+      env:
+        TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        
+    - name: Keep Alive
+      run: |
+        for ($i=0; $i -lt 360; $i++) {
+          Write-Host "Active: $i min"
+          Start-Sleep 60
+        }
