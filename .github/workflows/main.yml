@@ -77,36 +77,34 @@ jobs:
           
           # Extreme Performance Optimizations
           $rdpPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
-          Set-ItemProperty -Path $rdpPath -Name "MinEncryptionLevel" -Value 1 -Type DWord
-          Set-ItemProperty -Path $rdpPath -Name "SecurityLayer" -Value 0 -Type DWord  
-          Set-ItemProperty -Path $rdpPath -Name "UserAuthentication" -Value 0 -Type DWord
-          Set-ItemProperty -Path $rdpPath -Name "MaxXResolution" -Value 1280 -Type DWord
-          Set-ItemProperty -Path $rdpPath -Name "MaxYResolution" -Value 720 -Type DWord
-          Set-ItemProperty -Path $rdpPath -Name "ColorDepth" -Value 3 -Type DWord
-          Set-ItemProperty -Path $rdpPath -Name "DWMFRAMEINTERVAL" -Value 1 -Type DWord
+          Set-ItemProperty -Path $rdpPath -Name "MinEncryptionLevel" -Value 1 -Type DWord -Force
+          Set-ItemProperty -Path $rdpPath -Name "SecurityLayer" -Value 0 -Type DWord -Force
+          Set-ItemProperty -Path $rdpPath -Name "UserAuthentication" -Value 0 -Type DWord -Force
+          Set-ItemProperty -Path $rdpPath -Name "MaxXResolution" -Value 1280 -Type DWord -Force
+          Set-ItemProperty -Path $rdpPath -Name "MaxYResolution" -Value 720 -Type DWord -Force
+          Set-ItemProperty -Path $rdpPath -Name "ColorDepth" -Value 3 -Type DWord -Force
           
-          # Network Optimizations (Fixed registry path)
-          netsh int tcp set global autotuninglevel=normal
-          netsh int tcp set global rss=enabled
+          # Network Optimizations
+          netsh int tcp set global autotuninglevel=normal | Out-Null
+          netsh int tcp set global rss=enabled | Out-Null
           
-          # Create registry path if doesn't exist and set TCPNoDelay
-          $tcpPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server"
-          if (-not (Test-Path "$tcpPath\Parameters")) {
-              New-Item -Path $tcpPath -Name "Parameters" -Force | Out-Null
+          # TCPNoDelay registry setting with proper path
+          $tcpPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+          if (-not (Test-Path $tcpPath)) {
+              New-Item -Path $tcpPath -Force | Out-Null
           }
-          New-ItemProperty -Path "$tcpPath\Parameters" -Name "TCPNoDelay" -Value 1 -PropertyType DWord -Force | Out-Null
+          New-ItemProperty -Path $tcpPath -Name "TCPNoDelay" -Value 1 -PropertyType DWord -Force | Out-Null
           
           # Disable Visual Effects
-          Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Type DWord
+          Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Type DWord -Force
           
           Write-Host "🚀 Ultra Fast RDP Ready!"
 
       - name: Disable Unnecessary Services
         run: |
-          # Stop and disable non-essential services
+          # Stop and disable non-essential services (safe ones only)
           $services = @(
               "Themes",
-              "FontCache",
               "WSearch",
               "TabletInputService", 
               "WpnService"
@@ -114,9 +112,12 @@ jobs:
           
           foreach ($service in $services) {
               try {
-                  Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
-                  Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
-                  Write-Host "✅ Disabled: $service"
+                  $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
+                  if ($svc) {
+                      Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+                      Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
+                      Write-Host "✅ Disabled: $service"
+                  }
               } catch {
                   Write-Host "⚠️ Could not disable: $service"
               }
@@ -125,31 +126,42 @@ jobs:
       - name: Clean Temporary Files
         run: |
           # Clean temp files to save space
-          Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
+          Get-ChildItem -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
           Write-Host "✅ Temp files cleaned"
 
       - name: Show Connection Info
         run: |
+          Write-Host ""
           Write-Host "=========================================="
           Write-Host "🚀 YOUR ULTRA CLEAN RDP IS READY!"
           Write-Host "=========================================="
-          Write-Host "Username: Sazzad Islam"
-          Write-Host "Password: $env:RDP_PASS" 
-          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
-          Write-Host "Hostname: sazzadx21"
+          Write-Host "👤 Username: Sazzad Islam"
+          Write-Host "🔐 Password: $env:RDP_PASS" 
+          Write-Host "🔗 Tailscale IP: $env:TAILSCALE_IP"
+          Write-Host "🏷️ Hostname: sazzadx21"
           Write-Host "=========================================="
           Write-Host "📝 Connect using Microsoft Remote Desktop"
-          Write-Host "🔗 Address: $env:TAILSCALE_IP"
-          Write-Host "👤 Username: Sazzad Islam"
+          Write-Host "📍 Address: $env:TAILSCALE_IP"
+          Write-Host "👤 Username: Sazzad Islam" 
           Write-Host "🔐 Password: $env:RDP_PASS"
+          Write-Host "⏰ Runtime: ${{ inputs.runtime_minutes }} minutes"
           Write-Host "=========================================="
+          Write-Host ""
 
       - name: Keep Alive
         run: |
           $mins = [int]"${{ inputs.runtime_minutes }}"
+          if ($mins -lt 1) { $mins = 355 }
+          if ($mins -gt 360) { $mins = 355 }
+          
           $end = (Get-Date).AddMinutes($mins)
+          Write-Host "RDP Session Started - Ends at: $($end.ToString('HH:mm:ss'))"
+          Write-Host ""
+          
           while ((Get-Date) -lt $end) {
               $remaining = ($end - (Get-Date)).ToString("hh\:mm\:ss")
-              Write-Host "RDP Active - Time remaining: $remaining - User: Sazzad Islam - IP: $env:TAILSCALE_IP"
+              Write-Host "🟢 Active - Time remaining: $remaining - User: Sazzad Islam - IP: $env:TAILSCALE_IP"
               Start-Sleep -Seconds 60
           }
+          
+          Write-Host "Session completed successfully! ✅"
