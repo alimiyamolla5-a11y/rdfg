@@ -34,18 +34,19 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "FlowControlChannelBandwidth" -Value 0
         
         # Enable clipboard sharing
-        Set-ItemProperty -Path 'HKLM:\Software\Microsoft\Terminal Server Client' -name "DisableClipboardRedirection" -Value 0 -Force
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "fDisableClip" -Value 0
+        New-Item -Path 'HKLM:\Software\Microsoft\Terminal Server Client' -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path 'HKLM:\Software\Microsoft\Terminal Server Client' -name "DisableClipboardRedirection" -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "fDisableClip" -Value 0 -ErrorAction SilentlyContinue
         
         # Enable drive/file sharing
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "fDisableCdm" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "fDisableCdm" -Value 0 -ErrorAction SilentlyContinue
         
         # Enable printer sharing
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "fDisableCpm" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "fDisableCpm" -Value 0 -ErrorAction SilentlyContinue
         
         # Create shared folder
-        New-Item -ItemType Directory -Path "C:\Share" -Force
-        New-SmbShare -Name "Share" -Path "C:\Share" -FullAccess "Everyone"
+        New-Item -ItemType Directory -Path "C:\Share" -Force | Out-Null
+        icacls "C:\Share" /grant Everyone:F /T
         
         # Create user
         net user rdp FastRDP@2024 /add
