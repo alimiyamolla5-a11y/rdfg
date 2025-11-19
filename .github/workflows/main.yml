@@ -1,4 +1,4 @@
-name: Next-Level Tailscale RDP
+name: Next-Level Tailscale RDP - Random Password
 
 on:
   workflow_dispatch:
@@ -14,25 +14,38 @@ jobs:
     steps:
 
     # ---------------------------
-    # 1️⃣ Create RDP User
+    # 1️⃣ Generate Random Password
     # ---------------------------
-    - name: Create Professional RDP User
+    - name: Generate Random Password
+      id: passwordgen
+      run: |
+        $chars = @()
+        $chars += [char[]]'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+        $chars += [char[]]'abcdefghijklmnopqrstuvwxyz'
+        $chars += [char[]]'0123456789'
+        $chars += [char[]]'!@#$%^&*'
+        $pwd = -join ((1..12) | ForEach-Object { $chars | Get-Random })
+        echo "RDP_PASS=$pwd" >> $env:GITHUB_ENV
+        Write-Host "Generated RDP password: $pwd"
+
+    # ---------------------------
+    # 2️⃣ Create RDP User
+    # ---------------------------
+    - name: Create RDP User
       run: |
         $user = "sazzadx21"
-        $plain = "Sazzadx21!"
-        $secure = ConvertTo-SecureString $plain -AsPlainText -Force
-        
+        $secure = ConvertTo-SecureString $env:RDP_PASS -AsPlainText -Force
+
         Remove-LocalUser -Name $user -ErrorAction SilentlyContinue
         New-LocalUser -Name $user -Password $secure -FullName "Sazzad Islam" -AccountNeverExpires
         Add-LocalGroupMember -Group "Administrators" -Member $user
         Add-LocalGroupMember -Group "Remote Desktop Users" -Member $user
-        
+
         echo "RDP_USER=$user" >> $env:GITHUB_ENV
-        echo "RDP_PASS=$plain" >> $env:GITHUB_ENV
         Write-Host "✅ RDP User created: $user"
 
     # ---------------------------
-    # 2️⃣ Enable RDP + Firewall
+    # 3️⃣ Enable RDP + Firewall
     # ---------------------------
     - name: Enable RDP
       run: |
@@ -43,7 +56,7 @@ jobs:
         Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name MinEncryptionLevel -Value 1
 
     # ---------------------------
-    # 3️⃣ Install Tailscale
+    # 4️⃣ Install Tailscale
     # ---------------------------
     - name: Install Tailscale
       run: |
@@ -57,11 +70,11 @@ jobs:
         }
 
     # ---------------------------
-    # 4️⃣ Bring Up Tailscale
+    # 5️⃣ Connect Tailscale
     # ---------------------------
     - name: Connect Tailscale
       run: |
-        & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey="${{ inputs.ts_authkey }}" --hostname="gh-runner-$env:GITHUB_RUN_ID"
+        & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey="${{ inputs.ts_authkey }}" --hostname="ts-$([guid]::NewGuid().ToString('N').Substring(0,6))"
         $tsIP = $null
         $retries = 0
         while (-not $tsIP -and $retries -lt 15) {
@@ -74,58 +87,52 @@ jobs:
         Write-Host "✅ Tailscale IP: $tsIP"
 
     # ---------------------------
-    # 5️⃣ Ultra Performance Boost
+    # 6️⃣ Ultra Gaming + Clean Mode
     # ---------------------------
-    - name: Gaming & Ultra Clean Mode
+    - name: Gaming & Clean Optimizations
       run: |
-        # Power & CPU
         powercfg -setactive SCHEME_MIN
         powercfg /change monitor-timeout-ac 0
         powercfg /hibernate off
-        
-        # TCP / Latency Tweaks
+
         netsh int tcp set global autotuninglevel=high
         netsh int tcp set global rss=enabled
         reg add "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces" /v TCPNoDelay /t REG_DWORD /d 1 /f
         reg add "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces" /v TcpAckFrequency /t REG_DWORD /d 1 /f
 
-        # RAM Optimizer
+        # RAM, Visual, Audio Tweaks
         reg add "HKLM\SYSTEM\ControlSet001\Control\Session Manager\Memory Management" /v DisablePagingExecutive /t REG_DWORD /d 1 /f
         reg add "HKLM\SYSTEM\ControlSet001\Control\Session Manager\Memory Management" /v LargeSystemCache /t REG_DWORD /d 1 /f
-
-        # Visual & Input
         reg add "HKCU\Control Panel\Mouse" /v MouseSensitivity /t REG_SZ /d 10 /f
         reg add "HKLM\SOFTWARE\Microsoft\Windows\Dwm" /v EnableAeroPeek /t REG_DWORD /d 0 /f
         reg add "HKCU\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d "" /f
         RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
         reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" /v VisualFXSetting /t REG_DWORD /d 2 /f
-
-        # Audio latency fix
         reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render" /v LowLatencyMode /t REG_DWORD /d 1 /f
         reg add "HKCU\Software\Microsoft\Multimedia\Audio" /v UserDuckingPreference /t REG_DWORD /d 3 /f
 
     # ---------------------------
-    # 6️⃣ Show Connection Info
+    # 7️⃣ Show RDP Info
     # ---------------------------
     - name: Show RDP Info
       run: |
+        $data = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:4040/api/tunnels
+        $json = $data.Content | ConvertFrom-Json
+        $addr = $json.tunnels.public_url
+
         Write-Host "======================================="
-        Write-Host "🔥 NEXT-LEVEL TAILSCALE RDP READY!"
+        Write-Host "🔥 NEXT-LEVEL NGROK RDP READY!"
+        Write-Host "▶ Connect To: $addr"
         Write-Host "👤 User: $env:RDP_USER"
         Write-Host "🔐 Password: $env:RDP_PASS"
-        Write-Host "🔗 Tailscale IP: $env:TAILSCALE_IP"
         Write-Host "======================================="
 
     # ---------------------------
-    # 7️⃣ Keep Alive
+    # 8️⃣ Keep Alive
     # ---------------------------
     - name: Keep Alive
       run: |
-        $runtime = [int]("${{ inputs.runtime_minutes }}")
-        if ($runtime -lt 1) { $runtime = 360 }
-        $end = (Get-Date).AddMinutes($runtime)
-        while ((Get-Date) -lt $end) {
-          $remaining = ($end - (Get-Date)).ToString("hh\:mm\:ss")
-          Write-Host "🟢 RDP Active - Time remaining: $remaining - User: $env:RDP_USER - IP: $env:TAILSCALE_IP"
+        while ($true) {
+          Write-Host "🟢 RDP Active - Waiting..."
           Start-Sleep -Seconds 60
         }
