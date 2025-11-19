@@ -1,4 +1,4 @@
-name: Next-Level Tailscale RDP - Random Password
+name: Next-Level Tailscale RDP - Windows-Compliant Password
 
 on:
   workflow_dispatch:
@@ -14,19 +14,19 @@ jobs:
     steps:
 
     # ---------------------------
-    # 1️⃣ Generate Random Password
+    # 1️⃣ Generate Windows-Compliant Random Password
     # ---------------------------
-    - name: Generate Random Password
+    - name: Generate Windows-Compliant Password
       id: passwordgen
       run: |
-        $chars = @()
-        $chars += [char[]]'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-        $chars += [char[]]'abcdefghijklmnopqrstuvwxyz'
-        $chars += [char[]]'0123456789'
-        $chars += [char[]]'!@#$%^&*'
-        $pwd = -join ((1..12) | ForEach-Object { $chars | Get-Random })
-        echo "RDP_PASS=$pwd" >> $env:GITHUB_ENV
-        Write-Host "Generated RDP password: $pwd"
+        $upper = (65..90 | ForEach-Object {[char]$_}) | Get-Random -Count 2
+        $lower = (97..122 | ForEach-Object {[char]$_}) | Get-Random -Count 2
+        $digit = (48..57 | ForEach-Object {[char]$_}) | Get-Random -Count 2
+        $special = ('!','@','#','$','%','^','&','*') | Get-Random -Count 2
+
+        $password = -join ($upper + $lower + $digit + $special | Sort-Object {Get-Random})
+        echo "RDP_PASS=$password" >> $env:GITHUB_ENV
+        Write-Host "Generated password: $password"
 
     # ---------------------------
     # 2️⃣ Create RDP User
@@ -75,7 +75,8 @@ jobs:
       run: |
         & "$env:ProgramFiles\Tailscale\tailscale.exe" up `
           --authkey="${{ inputs.ts_authkey }}" `
-          --hostname="Sazzad Islam"
+          --hostname="Sazzad Islam" `
+          --accept-dns=false --accept-routes=false --shields-up=false
         $tsIP = $null
         $retries = 0
         while (-not $tsIP -and $retries -lt 15) {
@@ -137,4 +138,3 @@ jobs:
           $remaining = ($end - (Get-Date)).ToString("hh\:mm\:ss")
           Write-Host "🟢 RDP Active - Time remaining: $remaining - User: $env:RDP_USER - IP: $env:TAILSCALE_IP"
           Start-Sleep -Seconds 60
-        }
