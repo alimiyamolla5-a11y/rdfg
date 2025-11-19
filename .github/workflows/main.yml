@@ -1,167 +1,131 @@
-name: Ultra Clean RDP - Sazzad Islam
+name: Next-Level Tailscale RDP
 
 on:
   workflow_dispatch:
     inputs:
-      ts_tailnet:         { description: "Tailscale tailnet (e.g. you@gmail.com)", required: true }
-      ts_api_key:         { description: "Tailscale API key", required: true }
-      ts_authkey:         { description: "Tailscale Auth key", required: true }
-      runtime_minutes:    { description: "Runtime minutes", required: false, default: "355" }
-
-permissions:
-  contents: read
-
-defaults:
-  run:
-    shell: pwsh
+      ts_authkey:       { description: "Tailscale Auth Key", required: true }
+      runtime_minutes:  { description: "RDP Runtime (minutes)", required: false, default: "360" }
 
 jobs:
-  clean-rdp:
+  tailscale-rdp:
     runs-on: windows-latest
     timeout-minutes: 360
-    
+
     steps:
-      - name: Generate Strong Random Password
-        id: passgen
-        run: |
-          $chars = @()
-          $chars += [char[]]'abcdefghijklmnopqrstuvwxyz'
-          $chars += [char[]]'ABCDEFGHIJKLMNOPQRSTUVWXYZ' 
-          $chars += [char[]]'0123456789'
-          $chars += [char[]]'!@#$%^&*'
-          
-          $password = -join ((1..12) | ForEach-Object { 
-              $chars | Get-Random 
-          })
-          "RANDOM_PASS=$password" | Out-File -Append $env:GITHUB_OUTPUT
-          Write-Host "Generated password: $password"
 
-      - name: Set Custom User Credentials
-        run: |
-          $user = "Sazzad Islam"
-          $pass = "${{ steps.passgen.outputs.RANDOM_PASS }}"
-          
-          # Create or update user
-          $secpass = ConvertTo-SecureString $pass -AsPlainText -Force
-          
-          # Remove if exists and create fresh
-          Remove-LocalUser -Name $user -ErrorAction SilentlyContinue
-          New-LocalUser -Name $user -Password $secpass -AccountNeverExpires
-          Add-LocalGroupMember -Group "Administrators" -Member $user
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $user
-          
-          "RDP_USER=$user" | Out-File -Append $env:GITHUB_ENV
-          "RDP_PASS=$pass" | Out-File -Append $env:GITHUB_ENV
-          Write-Host "User created: $user"
+    # ---------------------------
+    # 1️⃣ Create RDP User
+    # ---------------------------
+    - name: Create Professional RDP User
+      run: |
+        $user = "sazzadx21"
+        $plain = "Sazzadx21!"
+        $secure = ConvertTo-SecureString $plain -AsPlainText -Force
+        
+        Remove-LocalUser -Name $user -ErrorAction SilentlyContinue
+        New-LocalUser -Name $user -Password $secure -FullName "Sazzad Islam" -AccountNeverExpires
+        Add-LocalGroupMember -Group "Administrators" -Member $user
+        Add-LocalGroupMember -Group "Remote Desktop Users" -Member $user
+        
+        echo "RDP_USER=$user" >> $env:GITHUB_ENV
+        echo "RDP_PASS=$plain" >> $env:GITHUB_ENV
+        Write-Host "✅ RDP User created: $user"
 
-      - name: Install Only Tailscale (Essential)
-        run: |
-          $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
-          if (-not (Test-Path $ts)) {
-            $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
-            $dst = "$env:TEMP\tailscale.msi"
-            Invoke-WebRequest -Uri $url -OutFile $dst
-            Start-Process msiexec.exe -ArgumentList "/i","`"$dst`"","/quiet","/norestart" -Wait
-            Remove-Item $dst -Force
-          }
-          & $ts up --authkey "${{ inputs.ts_authkey }}" --hostname "sazzadx21" --accept-dns=false --accept-routes=false --advertise-exit-node=false --shields-up=false
-          $ip4 = & $ts ip -4
-          "TAILSCALE_IP=$ip4" | Out-File -Append $env:GITHUB_ENV
-          Write-Host "Tailscale IP: $ip4"
+    # ---------------------------
+    # 2️⃣ Enable RDP + Firewall
+    # ---------------------------
+    - name: Enable RDP
+      run: |
+        Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name UserAuthentication -Value 0
+        Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name SecurityLayer -Value 1
+        Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name MinEncryptionLevel -Value 1
 
-      - name: Ultra Fast RDP Setup
-        run: |
-          # Enable RDP
-          Set-ItemProperty "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name fDenyTSConnections -Value 0
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop" | Out-Null
-          
-          # Extreme Performance Optimizations
-          $rdpPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
-          Set-ItemProperty -Path $rdpPath -Name "MinEncryptionLevel" -Value 1 -Type DWord -Force
-          Set-ItemProperty -Path $rdpPath -Name "SecurityLayer" -Value 0 -Type DWord -Force
-          Set-ItemProperty -Path $rdpPath -Name "UserAuthentication" -Value 0 -Type DWord -Force
-          Set-ItemProperty -Path $rdpPath -Name "MaxXResolution" -Value 1280 -Type DWord -Force
-          Set-ItemProperty -Path $rdpPath -Name "MaxYResolution" -Value 720 -Type DWord -Force
-          Set-ItemProperty -Path $rdpPath -Name "ColorDepth" -Value 3 -Type DWord -Force
-          
-          # Network Optimizations
-          netsh int tcp set global autotuninglevel=normal | Out-Null
-          netsh int tcp set global rss=enabled | Out-Null
-          
-          # TCPNoDelay registry setting with proper path
-          $tcpPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
-          if (-not (Test-Path $tcpPath)) {
-              New-Item -Path $tcpPath -Force | Out-Null
-          }
-          New-ItemProperty -Path $tcpPath -Name "TCPNoDelay" -Value 1 -PropertyType DWord -Force | Out-Null
-          
-          # Disable Visual Effects
-          Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Type DWord -Force
-          
-          Write-Host "🚀 Ultra Fast RDP Ready!"
+    # ---------------------------
+    # 3️⃣ Install Tailscale
+    # ---------------------------
+    - name: Install Tailscale
+      run: |
+        $tsPath = "$env:ProgramFiles\Tailscale\tailscale.exe"
+        if (-not (Test-Path $tsPath)) {
+          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
+          $dst = "$env:TEMP\tailscale.msi"
+          Invoke-WebRequest -Uri $url -OutFile $dst
+          Start-Process msiexec.exe -ArgumentList "/i","`"$dst`"","/quiet","/norestart" -Wait
+          Remove-Item $dst -Force
+        }
 
-      - name: Disable Unnecessary Services
-        run: |
-          # Stop and disable non-essential services (safe ones only)
-          $services = @(
-              "Themes",
-              "WSearch",
-              "TabletInputService", 
-              "WpnService"
-          )
-          
-          foreach ($service in $services) {
-              try {
-                  $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
-                  if ($svc) {
-                      Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
-                      Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
-                      Write-Host "✅ Disabled: $service"
-                  }
-              } catch {
-                  Write-Host "⚠️ Could not disable: $service"
-              }
-          }
+    # ---------------------------
+    # 4️⃣ Bring Up Tailscale
+    # ---------------------------
+    - name: Connect Tailscale
+      run: |
+        & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey="${{ inputs.ts_authkey }}" --hostname="gh-runner-$env:GITHUB_RUN_ID"
+        $tsIP = $null
+        $retries = 0
+        while (-not $tsIP -and $retries -lt 15) {
+          $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+          Start-Sleep -Seconds 5
+          $retries++
+        }
+        if (-not $tsIP) { Write-Error "Tailscale IP not assigned. Exiting."; exit 1 }
+        echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+        Write-Host "✅ Tailscale IP: $tsIP"
 
-      - name: Clean Temporary Files
-        run: |
-          # Clean temp files to save space
-          Get-ChildItem -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-          Write-Host "✅ Temp files cleaned"
+    # ---------------------------
+    # 5️⃣ Ultra Performance Boost
+    # ---------------------------
+    - name: Gaming & Ultra Clean Mode
+      run: |
+        # Power & CPU
+        powercfg -setactive SCHEME_MIN
+        powercfg /change monitor-timeout-ac 0
+        powercfg /hibernate off
+        
+        # TCP / Latency Tweaks
+        netsh int tcp set global autotuninglevel=high
+        netsh int tcp set global rss=enabled
+        reg add "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces" /v TCPNoDelay /t REG_DWORD /d 1 /f
+        reg add "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces" /v TcpAckFrequency /t REG_DWORD /d 1 /f
 
-      - name: Show Connection Info
-        run: |
-          Write-Host ""
-          Write-Host "=========================================="
-          Write-Host "🚀 YOUR ULTRA CLEAN RDP IS READY!"
-          Write-Host "=========================================="
-          Write-Host "👤 Username: Sazzad Islam"
-          Write-Host "🔐 Password: $env:RDP_PASS" 
-          Write-Host "🔗 Tailscale IP: $env:TAILSCALE_IP"
-          Write-Host "🏷️ Hostname: sazzadx21"
-          Write-Host "=========================================="
-          Write-Host "📝 Connect using Microsoft Remote Desktop"
-          Write-Host "📍 Address: $env:TAILSCALE_IP"
-          Write-Host "👤 Username: Sazzad Islam" 
-          Write-Host "🔐 Password: $env:RDP_PASS"
-          Write-Host "⏰ Runtime: ${{ inputs.runtime_minutes }} minutes"
-          Write-Host "=========================================="
-          Write-Host ""
+        # RAM Optimizer
+        reg add "HKLM\SYSTEM\ControlSet001\Control\Session Manager\Memory Management" /v DisablePagingExecutive /t REG_DWORD /d 1 /f
+        reg add "HKLM\SYSTEM\ControlSet001\Control\Session Manager\Memory Management" /v LargeSystemCache /t REG_DWORD /d 1 /f
 
-      - name: Keep Alive
-        run: |
-          $mins = [int]"${{ inputs.runtime_minutes }}"
-          if ($mins -lt 1) { $mins = 355 }
-          if ($mins -gt 360) { $mins = 355 }
-          
-          $end = (Get-Date).AddMinutes($mins)
-          Write-Host "RDP Session Started - Ends at: $($end.ToString('HH:mm:ss'))"
-          Write-Host ""
-          
-          while ((Get-Date) -lt $end) {
-              $remaining = ($end - (Get-Date)).ToString("hh\:mm\:ss")
-              Write-Host "🟢 Active - Time remaining: $remaining - User: Sazzad Islam - IP: $env:TAILSCALE_IP"
-              Start-Sleep -Seconds 60
-          }
-          
-          Write-Host "Session completed successfully! ✅"
+        # Visual & Input
+        reg add "HKCU\Control Panel\Mouse" /v MouseSensitivity /t REG_SZ /d 10 /f
+        reg add "HKLM\SOFTWARE\Microsoft\Windows\Dwm" /v EnableAeroPeek /t REG_DWORD /d 0 /f
+        reg add "HKCU\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d "" /f
+        RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" /v VisualFXSetting /t REG_DWORD /d 2 /f
+
+        # Audio latency fix
+        reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render" /v LowLatencyMode /t REG_DWORD /d 1 /f
+        reg add "HKCU\Software\Microsoft\Multimedia\Audio" /v UserDuckingPreference /t REG_DWORD /d 3 /f
+
+    # ---------------------------
+    # 6️⃣ Show Connection Info
+    # ---------------------------
+    - name: Show RDP Info
+      run: |
+        Write-Host "======================================="
+        Write-Host "🔥 NEXT-LEVEL TAILSCALE RDP READY!"
+        Write-Host "👤 User: $env:RDP_USER"
+        Write-Host "🔐 Password: $env:RDP_PASS"
+        Write-Host "🔗 Tailscale IP: $env:TAILSCALE_IP"
+        Write-Host "======================================="
+
+    # ---------------------------
+    # 7️⃣ Keep Alive
+    # ---------------------------
+    - name: Keep Alive
+      run: |
+        $runtime = [int]("${{ inputs.runtime_minutes }}")
+        if ($runtime -lt 1) { $runtime = 360 }
+        $end = (Get-Date).AddMinutes($runtime)
+        while ((Get-Date) -lt $end) {
+          $remaining = ($end - (Get-Date)).ToString("hh\:mm\:ss")
+          Write-Host "🟢 RDP Active - Time remaining: $remaining - User: $env:RDP_USER - IP: $env:TAILSCALE_IP"
+          Start-Sleep -Seconds 60
+        }
