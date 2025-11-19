@@ -40,7 +40,6 @@ jobs:
         New-LocalUser -Name $user -Password $secure -FullName "Sazzad Islam" -AccountNeverExpires
         Add-LocalGroupMember -Group "Administrators" -Member $user
         Add-LocalGroupMember -Group "Remote Desktop Users" -Member $user
-
         echo "RDP_USER=$user" >> $env:GITHUB_ENV
         Write-Host "✅ RDP User created: $user"
 
@@ -70,11 +69,13 @@ jobs:
         }
 
     # ---------------------------
-    # 5️⃣ Connect Tailscale
+    # 5️⃣ Connect Tailscale (Device Name: Sazzad Islam)
     # ---------------------------
     - name: Connect Tailscale
       run: |
-        & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey="${{ inputs.ts_authkey }}" --hostname="ts-$([guid]::NewGuid().ToString('N').Substring(0,6))"
+        & "$env:ProgramFiles\Tailscale\tailscale.exe" up `
+          --authkey="${{ inputs.ts_authkey }}" `
+          --hostname="Sazzad Islam"
         $tsIP = $null
         $retries = 0
         while (-not $tsIP -and $retries -lt 15) {
@@ -84,7 +85,7 @@ jobs:
         }
         if (-not $tsIP) { Write-Error "Tailscale IP not assigned. Exiting."; exit 1 }
         echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
-        Write-Host "✅ Tailscale IP: $tsIP"
+        Write-Host "✅ Tailscale IP: $tsIP, Device Name: Sazzad Islam"
 
     # ---------------------------
     # 6️⃣ Ultra Gaming + Clean Mode
@@ -116,15 +117,12 @@ jobs:
     # ---------------------------
     - name: Show RDP Info
       run: |
-        $data = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:4040/api/tunnels
-        $json = $data.Content | ConvertFrom-Json
-        $addr = $json.tunnels.public_url
-
         Write-Host "======================================="
-        Write-Host "🔥 NEXT-LEVEL NGROK RDP READY!"
-        Write-Host "▶ Connect To: $addr"
+        Write-Host "🔥 NEXT-LEVEL TAILSCALE RDP READY!"
         Write-Host "👤 User: $env:RDP_USER"
         Write-Host "🔐 Password: $env:RDP_PASS"
+        Write-Host "🔗 Tailscale IP: $env:TAILSCALE_IP"
+        Write-Host "🏷 Device Name: Sazzad Islam"
         Write-Host "======================================="
 
     # ---------------------------
@@ -132,7 +130,11 @@ jobs:
     # ---------------------------
     - name: Keep Alive
       run: |
-        while ($true) {
-          Write-Host "🟢 RDP Active - Waiting..."
+        $runtime = [int]("${{ inputs.runtime_minutes }}")
+        if ($runtime -lt 1) { $runtime = 360 }
+        $end = (Get-Date).AddMinutes($runtime)
+        while ((Get-Date) -lt $end) {
+          $remaining = ($end - (Get-Date)).ToString("hh\:mm\:ss")
+          Write-Host "🟢 RDP Active - Time remaining: $remaining - User: $env:RDP_USER - IP: $env:TAILSCALE_IP"
           Start-Sleep -Seconds 60
         }
